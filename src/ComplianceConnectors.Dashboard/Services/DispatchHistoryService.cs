@@ -35,4 +35,26 @@ public sealed class DispatchHistoryService
         _history.Insert(0, new DispatchRecord(document, outcomes, DateTimeOffset.UtcNow));
         OnChange?.Invoke();
     }
+
+    public void Clear()
+    {
+        _history.Clear();
+        OnChange?.Invoke();
+    }
+
+    /// <summary>Per-regime counters across the whole session, for the summary cards.</summary>
+    public IReadOnlyList<RegimeSummary> Summaries =>
+        _history
+            .SelectMany(r => r.Outcomes)
+            .Where(o => o.Status != ReportStatus.NotApplicable)
+            .GroupBy(o => o.RegimeCode)
+            .Select(g => new RegimeSummary(
+                g.Key,
+                g.Count(o => o.Status == ReportStatus.Delivered),
+                g.Count(o => o.Status == ReportStatus.DeadLettered),
+                g.Sum(o => o.Attempts)))
+            .OrderBy(s => s.RegimeCode)
+            .ToList();
 }
+
+public sealed record RegimeSummary(string RegimeCode, int Delivered, int DeadLettered, int TotalAttempts);

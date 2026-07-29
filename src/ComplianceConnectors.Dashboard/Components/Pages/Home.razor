@@ -5,36 +5,88 @@
 @inject DispatchHistoryService HistoryService
 @implements IDisposable
 
-<PageTitle>Compliance Connector Dashboard</PageTitle>
+<PageTitle>Compliance Connector Dashboard — Pionira</PageTitle>
 
 <div class="page">
     <header>
         <p class="eyebrow">Compliance Connector Framework — Blazor</p>
         <h1>Eén document, meerdere onafhankelijke meldingen</h1>
         <p class="lede">
-            Onderteken hieronder een voorbeelddocument. De dispatcher stuurt het door naar elk
-            toepasselijk regime (BE-MATIS, EU-DIWASS, ES-DECA) — elk met een eigen retry-beleid.
-            EU-DIWASS is bewust gesimuleerd als onstabiel bij de eerste paar aanroepen, om de
-            retry- en dead-letter-flow zichtbaar te maken.
+            Onderteken een document — via een voorbeeld of het formulier — en volg live hoe de
+            dispatcher het doorstuurt naar elk toepasselijk regime (BE-MATIS, EU-DIWASS, ES-DECA),
+            elk met een eigen retry-beleid. EU-DIWASS is bewust gesimuleerd als onstabiel bij de
+            eerste paar aanroepen, om de retry- en dead-letter-flow zichtbaar te maken.
         </p>
     </header>
 
+    @if (HistoryService.Summaries.Count > 0)
+    {
+        <section class="summary">
+            @foreach (var summary in HistoryService.Summaries)
+            {
+                <div class="summary-card">
+                    <span class="summary-regime">@summary.RegimeCode</span>
+                    <div class="summary-numbers">
+                        <span class="summary-num delivered">@summary.Delivered</span>
+                        <span class="summary-label">geleverd</span>
+                    </div>
+                    @if (summary.DeadLettered > 0)
+                    {
+                        <div class="summary-numbers">
+                            <span class="summary-num deadlettered">@summary.DeadLettered</span>
+                            <span class="summary-label">dead-lettered</span>
+                        </div>
+                    }
+                    <span class="summary-attempts">@summary.TotalAttempts pogingen totaal</span>
+                </div>
+            }
+        </section>
+    }
+
     <section class="composer">
-        <h2>Document ondertekenen</h2>
+        <h2>Document ondertekenen — voorbeelden</h2>
         <div class="presets">
-            <button class="preset" @onclick='() => Sign("BE", "NL", true)'>
+            <button class="preset" @onclick='() => Sign("BE", "NL", true)' disabled="@_dispatching">
                 <span class="route">BE → NL</span><span class="tag">afval</span>
             </button>
-            <button class="preset" @onclick='() => Sign("BE", "ES", false)'>
+            <button class="preset" @onclick='() => Sign("BE", "ES", false)' disabled="@_dispatching">
                 <span class="route">BE → ES</span><span class="tag">geen afval</span>
             </button>
-            <button class="preset" @onclick='() => Sign("ES", "FR", true)'>
+            <button class="preset" @onclick='() => Sign("ES", "FR", true)' disabled="@_dispatching">
                 <span class="route">ES → FR</span><span class="tag">afval</span>
             </button>
-            <button class="preset" @onclick='() => Sign("BE", "BE", true)'>
+            <button class="preset" @onclick='() => Sign("BE", "BE", true)' disabled="@_dispatching">
                 <span class="route">BE → BE</span><span class="tag">afval, binnenlands</span>
             </button>
         </div>
+
+        <h2 class="form-heading">Of stel je eigen document samen</h2>
+        <div class="custom-form">
+            <label>
+                <span>Herkomst</span>
+                <select @bind="_customOrigin">
+                    @foreach (var c in Countries)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label>
+                <span>Bestemming</span>
+                <select @bind="_customDestination">
+                    @foreach (var c in Countries)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" @bind="_customWaste" />
+                <span>Bevat afval (Annex VII)</span>
+            </label>
+            <button class="submit" @onclick="SignCustom" disabled="@_dispatching">Onderteken en verstuur</button>
+        </div>
+
         @if (_dispatching)
         {
             <p class="status-line">Bezig met dispatchen…</p>
@@ -42,10 +94,16 @@
     </section>
 
     <section class="history">
-        <h2>Geschiedenis (@HistoryService.History.Count)</h2>
+        <div class="history-head">
+            <h2>Geschiedenis (@HistoryService.History.Count)</h2>
+            @if (HistoryService.History.Count > 0)
+            {
+                <button class="clear" @onclick="Clear">Wis geschiedenis</button>
+            }
+        </div>
         @if (HistoryService.History.Count == 0)
         {
-            <p class="empty">Nog geen document ondertekend. Klik hierboven op een voorbeeld.</p>
+            <p class="empty">Nog geen document ondertekend. Klik hierboven op een voorbeeld of vul het formulier in.</p>
         }
         else
         {
@@ -78,18 +136,32 @@
             }
         }
     </section>
+
+    <footer class="page-footer">
+        Portfolioproject bij het <a href="https://phlppgdfry.github.io/pionira-compliance-pitch/" target="_blank" rel="noopener">Compliance Connector Framework-voorstel</a>
+        voor Pionira. Broncode: <a href="https://github.com/phlppgdfry/pionira-compliance-connector-poc" target="_blank" rel="noopener">github.com/phlppgdfry/pionira-compliance-connector-poc</a>
+    </footer>
 </div>
 
 @code {
+    private static readonly string[] Countries = ["BE", "NL", "ES", "FR", "DE"];
+
     private bool _dispatching;
     private int _counter;
+    private string _customOrigin = "BE";
+    private string _customDestination = "NL";
+    private bool _customWaste = true;
 
     protected override void OnInitialized()
     {
         HistoryService.OnChange += StateHasChanged;
     }
 
-    private async Task Sign(string origin, string destination, bool waste)
+    private Task Sign(string origin, string destination, bool waste) => DispatchAsync(origin, destination, waste);
+
+    private Task SignCustom() => DispatchAsync(_customOrigin, _customDestination, _customWaste);
+
+    private async Task DispatchAsync(string origin, string destination, bool waste)
     {
         _dispatching = true;
         _counter++;
@@ -104,6 +176,8 @@
         await HistoryService.DispatchAsync(document);
         _dispatching = false;
     }
+
+    private void Clear() => HistoryService.Clear();
 
     private static string StatusClass(ReportStatus status) => status switch
     {
