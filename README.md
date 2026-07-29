@@ -25,6 +25,10 @@ another regime or the document itself. Not every regime delivers the same way, e
   a fourth class — nothing else changes.
 - **`ComplianceConnectors.Demo`** — a console app that signs a few sample documents and prints
   what each connector does, including a live retry against the simulated DIWASS outage.
+- **`ComplianceConnectors.Dashboard`** — a Blazor Web App (Server interactivity) that puts a UI
+  on the same dispatcher: sign a sample document and watch, per regime, whether it was
+  delivered, is still not applicable, or got dead-lettered — including the attempt count, so
+  the DIWASS retry is visible without reading logs.
 - **`ComplianceConnectors.Tests`** — 16 xUnit tests: applicability rules per regime, retry
   behavior, dead-lettering after exhausted retries, and — the architectural point — proof that
   one reporter failing never affects another reporter's outcome.
@@ -32,8 +36,9 @@ another regime or the document itself. Not every regime delivers the same way, e
 ## Run it
 
 ```bash
-dotnet test                                    # 16 tests, all green
-dotnet run --project src/ComplianceConnectors.Demo
+dotnet test                                              # 16 tests, all green
+dotnet run --project src/ComplianceConnectors.Demo       # console version
+dotnet run --project src/ComplianceConnectors.Dashboard  # Blazor dashboard, http://localhost:5289
 ```
 
 ## What this deliberately does not do

@@ -1,0 +1,126 @@
+@page "/"
+@rendermode InteractiveServer
+@using ComplianceConnectors.Core
+@using ComplianceConnectors.Dashboard.Services
+@inject DispatchHistoryService HistoryService
+@implements IDisposable
+
+<PageTitle>Compliance Connector Dashboard</PageTitle>
+
+<div class="page">
+    <header>
+        <p class="eyebrow">Compliance Connector Framework — Blazor</p>
+        <h1>Eén document, meerdere onafhankelijke meldingen</h1>
+        <p class="lede">
+            Onderteken hieronder een voorbeelddocument. De dispatcher stuurt het door naar elk
+            toepasselijk regime (BE-MATIS, EU-DIWASS, ES-DECA) — elk met een eigen retry-beleid.
+            EU-DIWASS is bewust gesimuleerd als onstabiel bij de eerste paar aanroepen, om de
+            retry- en dead-letter-flow zichtbaar te maken.
+        </p>
+    </header>
+
+    <section class="composer">
+        <h2>Document ondertekenen</h2>
+        <div class="presets">
+            <button class="preset" @onclick='() => Sign("BE", "NL", true)'>
+                <span class="route">BE → NL</span><span class="tag">afval</span>
+            </button>
+            <button class="preset" @onclick='() => Sign("BE", "ES", false)'>
+                <span class="route">BE → ES</span><span class="tag">geen afval</span>
+            </button>
+            <button class="preset" @onclick='() => Sign("ES", "FR", true)'>
+                <span class="route">ES → FR</span><span class="tag">afval</span>
+            </button>
+            <button class="preset" @onclick='() => Sign("BE", "BE", true)'>
+                <span class="route">BE → BE</span><span class="tag">afval, binnenlands</span>
+            </button>
+        </div>
+        @if (_dispatching)
+        {
+            <p class="status-line">Bezig met dispatchen…</p>
+        }
+    </section>
+
+    <section class="history">
+        <h2>Geschiedenis (@HistoryService.History.Count)</h2>
+        @if (HistoryService.History.Count == 0)
+        {
+            <p class="empty">Nog geen document ondertekend. Klik hierboven op een voorbeeld.</p>
+        }
+        else
+        {
+            @foreach (var record in HistoryService.History)
+            {
+                <div class="record">
+                    <div class="record-head">
+                        <span class="doc-id">@record.Document.DocumentId</span>
+                        <span class="route-small">@record.Document.OriginCountry → @record.Document.DestinationCountry</span>
+                        @if (record.Document.ContainsWaste)
+                        {
+                            <span class="waste-badge">afval</span>
+                        }
+                        <span class="time">@record.DispatchedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                    </div>
+                    <div class="outcomes">
+                        @foreach (var outcome in record.Outcomes)
+                        {
+                            <span class="outcome @StatusClass(outcome.Status)">
+                                <strong>@outcome.RegimeCode</strong>
+                                <span class="outcome-status">@StatusLabel(outcome.Status)</span>
+                                @if (outcome.Status != ReportStatus.NotApplicable)
+                                {
+                                    <span class="attempts">@outcome.Attempts poging@(outcome.Attempts == 1 ? "" : "en")</span>
+                                }
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </section>
+</div>
+
+@code {
+    private bool _dispatching;
+    private int _counter;
+
+    protected override void OnInitialized()
+    {
+        HistoryService.OnChange += StateHasChanged;
+    }
+
+    private async Task Sign(string origin, string destination, bool waste)
+    {
+        _dispatching = true;
+        _counter++;
+        var document = new SignedDocument(
+            $"DOC-{_counter:000}",
+            DocumentType.AnnexVii,
+            origin,
+            destination,
+            waste,
+            DateTimeOffset.UtcNow);
+
+        await HistoryService.DispatchAsync(document);
+        _dispatching = false;
+    }
+
+    private static string StatusClass(ReportStatus status) => status switch
+    {
+        ReportStatus.Delivered => "status-delivered",
+        ReportStatus.DeadLettered => "status-deadlettered",
+        _ => "status-na"
+    };
+
+    private static string StatusLabel(ReportStatus status) => status switch
+    {
+        ReportStatus.Delivered => "Geleverd",
+        ReportStatus.DeadLettered => "Dead-lettered",
+        _ => "N.v.t."
+    };
+
+    public void Dispose()
+    {
+        HistoryService.OnChange -= StateHasChanged;
+    }
+}
